@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirect</title>
+    <script>
+        // Redirect 404s to the index file for single-page app routing
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        const baseUrl = window.location.origin;
+        
+        // Keep the repo name in the path
+        if (pathSegments[0] === 'semi-property-guardian') {
+            // Redirect to index.html which will handle routing client-side
+            const redirectPath = '/' + pathSegments.join('/');
+            window.location.replace(baseUrl + '/semi-property-guardian/#' + redirectPath);
+        }
+    </script>
+</head>
+<body>
+    Redirecting...
+</body>
+</html>
