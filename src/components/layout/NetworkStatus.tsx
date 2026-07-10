@@ -37,8 +37,9 @@ export const NetworkStatus = () => {
                 try {
                     const start = performance.now();
                     // Fetch a small, commonly-present asset to gauge network speed.
-                    // Use a dedicated lightweight `/ping` file served from `public/` to guarantee 200.
-                    const res = await fetch('/ping?' + new Date().getTime(), { method: 'HEAD', cache: 'no-store' });
+                    // Use a dedicated lightweight ping file served from `public/` and make it base-aware.
+                    const pingUrl = `${import.meta.env.BASE_URL}ping?${new Date().getTime()}`;
+                    const res = await fetch(pingUrl, { method: 'HEAD', cache: 'no-store' });
                     if (res && res.ok) {
                         setLatency(Math.round(performance.now() - start));
                     }
