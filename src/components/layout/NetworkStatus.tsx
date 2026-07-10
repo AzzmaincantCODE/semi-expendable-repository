@@ -36,11 +36,14 @@ export const NetworkStatus = () => {
                 if (!navigator.onLine) return;
                 try {
                     const start = performance.now();
-                    // Fetch a tiny local resource to gauge network speed
-                    await fetch('/?' + new Date().getTime(), { method: 'HEAD', cache: 'no-store' });
-                    setLatency(Math.round(performance.now() - start));
+                    // Fetch a small, commonly-present asset to gauge network speed.
+                    // Use a dedicated lightweight `/ping` file served from `public/` to guarantee 200.
+                    const res = await fetch('/ping?' + new Date().getTime(), { method: 'HEAD', cache: 'no-store' });
+                    if (res && res.ok) {
+                        setLatency(Math.round(performance.now() - start));
+                    }
                 } catch (e) {
-                    // Ignore errors, we might be offline but the event hasn't fired
+                    // Ignore errors, we might be offline or the origin blocks HEAD requests
                 }
             };
 
