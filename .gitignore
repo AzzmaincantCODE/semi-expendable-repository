@@ -19,7 +19,6 @@ build_desktop/
 .env.test.local
 .env.production.local
 .env.*.local
-.env.example
 
 # Logs
 logs
