@@ -88,7 +88,7 @@ export const Header = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <img src={pamdIcon} alt="PAMD" className="h-10 w-10 rounded-full object-cover" />
+              <img src={pamdIcon} alt="PAMD" className="h-10 w-10 rounded-full object-cover" loading="eager" decoding="async" />
               <div>
                 <h1 className="text-xl font-bold">Semi-Expendable Property</h1>
                 <p className="text-sm text-white/80">Property & Asset Management Division</p>
