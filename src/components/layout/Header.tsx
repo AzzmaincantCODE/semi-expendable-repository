@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Monitor, LogOut, Search, Download, Loader2 } from "lucide-react";
+import { Moon, Sun, Monitor, LogOut, Search, Download, Loader2, RefreshCw } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +24,10 @@ export const Header = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleRefresh = () => {
+    window.location.reload();
   };
 
   const EXPORTS = [
@@ -95,6 +99,18 @@ export const Header = () => {
           <div className="flex items-center space-x-2 md:space-x-3">
             {/* Network Latency Indicator */}
             <NetworkStatus />
+
+            {/* Refresh Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white hover:bg-white/10 flex items-center gap-2"
+              onClick={handleRefresh}
+              title="Refresh Data"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="text-sm hidden sm:inline">Refresh</span>
+            </Button>
 
             {/* Quick Search Button */}
             <Button

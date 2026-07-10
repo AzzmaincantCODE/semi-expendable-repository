@@ -39,18 +39,19 @@ const STEPS: SnapshotStep[] = [
   { label: 'Fund Sources & Categories',   status: 'pending' },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function safeQuery(
-  query: PromiseLike<{ data: any; error: any }>,
-  fallback: any[] = []
+  query: PromiseLike<{ data: any; error: any }>
 ): Promise<any[]> {
   try {
     const { data, error } = await query;
-    if (error) { console.warn('[snapshotEngine] Query error:', error); return fallback; }
-    return (Array.isArray(data) ? data : []) ?? fallback;
+    if (error) { 
+      console.warn('[snapshotEngine] Query error:', error); 
+      throw error; 
+    }
+    return (Array.isArray(data) ? data : []);
   } catch (e) {
     console.warn('[snapshotEngine] Network error:', e);
-    return fallback;
+    throw e;
   }
 }
 

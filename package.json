@@ -3,13 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "auto-commit": "node scripts/auto-commit.js"
+    "auto-commit": "node scripts/auto-commit.js",
+    "electron:dev": "concurrently \"cross-env ELECTRON=true npm run dev\" \"wait-on http://localhost:8080 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npx cross-env ELECTRON=true npx vite build && npx electron-packager . \"Semi-Property Guardian\" --platform=win32 --arch=x64 --out=build_desktop --overwrite --icon=\"public\\gso-logo.ico\" --ignore=\"node_modules|src|supabase|database|itrexcel|HEADERIMG|src-tauri|workplace|scripts|tmp\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -75,15 +78,41 @@
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
     "chokidar": "^4.0.3",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "electron-packager": "^17.1.2",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "lovable-tagger": "^1.1.9",
+    "png-to-ico": "^3.0.2",
     "postcss": "^8.5.6",
+    "sharp": "^0.35.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^7.2.7"
+    "vite": "^7.2.7",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.semiproperty.guardian",
+    "productName": "Semi-Property Guardian",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
   }
 }
