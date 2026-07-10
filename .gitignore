@@ -75,3 +75,6 @@ coverage/
 
 # Turbo
 .turbo
+
+# Internal / AI workspace files
+workplace ai rules
