@@ -79,5 +79,5 @@ coverage/
 # Internal / AI workspace files
 workplace ai rules
 
-#personal user ignore
-HEADERIMG
+# Personal user image assets
+HEADERIMG/
