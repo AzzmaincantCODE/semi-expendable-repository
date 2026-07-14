@@ -64,6 +64,11 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [snapshotFailed, setSnapshotFailed] = useState(false);
   const pendingGoOffline = useRef(false);
 
+  // Holds the latest `startSync` so `toggle` can invoke it without capturing a
+  // stale closure (toggle is memoized before startSync is defined). Kept in sync
+  // by the effect below.
+  const startSyncRef = useRef<() => Promise<void>>(async () => {});
+
   const refreshPendingCount = useCallback(async () => {
     const count = await getPendingCount();
     setPendingCount(count);
@@ -95,7 +100,18 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setSnapshotDone(true);
           setSnapshotFailed(anyFailed);
         }
-      });
+      })
+        .then((ok) => {
+          // Guarantee the overlay reaches a terminal (escapable) state even if the
+          // progress callback never marked every step done.
+          setSnapshotDone(true);
+          if (!ok) setSnapshotFailed(true);
+        })
+        .catch(() => {
+          // Snapshot threw — surface a failure state so the screen isn't a dead-end.
+          setSnapshotDone(true);
+          setSnapshotFailed(true);
+        });
     } else {
       // Going LIVE — prompt sync if there are pending changes
       if (pendingCount > 0) {
@@ -105,7 +121,7 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!confirmed) return;
         setIsOfflineMode(false);
         persistMode(false);
-        void startSync();
+        void startSyncRef.current();
         return;
       }
       setIsOfflineMode(false);
@@ -113,7 +129,7 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [isOfflineMode, pendingCount]);
 
-  // User clicks "Start Working Offline" / "Continue Anyway" on snapshot screen
+  // User clicks "Start Working Offline" on a successful snapshot screen
   const handleSnapshotComplete = useCallback(() => {
     setSnapshotting(false);
     if (pendingGoOffline.current) {
@@ -121,6 +137,16 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsOfflineMode(true);
       persistMode(true);
     }
+  }, []);
+
+  // User dismisses a FAILED snapshot — abort going offline and stay live, rather
+  // than entering a half-populated (unreliable) offline state.
+  const handleSnapshotAbort = useCallback(() => {
+    pendingGoOffline.current = false;
+    setSnapshotting(false);
+    setSnapshotSteps([]);
+    setSnapshotDone(false);
+    setSnapshotFailed(false);
   }, []);
 
   // ── Sync ────────────────────────────────────────────────────────────────────
@@ -141,6 +167,11 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSyncing(false);
     }
   }, [syncing, refreshPendingCount]);
+
+  // Keep the ref pointed at the latest startSync (see startSyncRef above).
+  useEffect(() => {
+    startSyncRef.current = startSync;
+  }, [startSync]);
 
   return (
     <DataModeContext.Provider
@@ -164,7 +195,11 @@ export const DataModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         steps={snapshotSteps}
         isDone={snapshotDone}
         hasFailed={snapshotFailed && snapshotDone}
-        onCancel={snapshotDone ? handleSnapshotComplete : undefined}
+        onCancel={
+          snapshotDone
+            ? (snapshotFailed ? handleSnapshotAbort : handleSnapshotComplete)
+            : undefined
+        }
       />
 
       {/* Floating sync progress panel */}

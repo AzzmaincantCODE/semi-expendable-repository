@@ -19,6 +19,7 @@ import { getNewestRecordId, isWithinRecentThreshold } from "@/lib/utils";
 import { annexService } from "@/services/annexService";
 import { simpleInventoryService } from "@/services/simpleInventoryService";
 import { propertyCardService } from "@/services/propertyCardService";
+import { useDataMode } from "@/offline/dataModeContext";
 import { SemiExpendablePropertyCard } from "@/components/reports/SemiExpendablePropertyCard";
 import { BulkPropertyCardWizard } from "@/components/property-cards/BulkPropertyCardWizard";
 import {
@@ -32,6 +33,7 @@ export const PropertyCardsAnnex = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isOfflineMode } = useDataMode();
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [selectedCard, setSelectedCard] = useState<AnnexPropertyCard | null>(null);
@@ -689,13 +691,20 @@ export const PropertyCardsAnnex = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">Semi-Expendable Property Cards (Annex A.1)</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-foreground">Semi-Expendable Property Cards (Annex A.1)</h1>
+          {isOfflineMode && (
+            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+              Read-only while offline
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2">
-          <Button onClick={() => setShowBulkWizard(true)} variant="outline" className="flex items-center gap-2">
+          <Button onClick={() => setShowBulkWizard(true)} variant="outline" className="flex items-center gap-2" disabled={isOfflineMode}>
             <Plus className="h-4 w-4" />
             Bulk Create
           </Button>
-          <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
+          <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2" disabled={isOfflineMode}>
             <Plus className="h-4 w-4" />
             Create from Inventory
           </Button>
@@ -835,7 +844,7 @@ export const PropertyCardsAnnex = () => {
                                     ? `Cannot delete - item is assigned to ${(card as any).custodian}`
                                     : "Delete property card"}
                                   className="text-destructive hover:text-destructive"
-                                  disabled={deleteCardMutation.isPending}
+                                  disabled={deleteCardMutation.isPending || isOfflineMode}
                                 >
                                   {deleteCardMutation.isPending && cardToDelete?.id === card.id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />

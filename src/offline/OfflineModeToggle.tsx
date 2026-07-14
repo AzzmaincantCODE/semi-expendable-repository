@@ -13,16 +13,9 @@ import { cn } from '@/lib/utils';
 export const OfflineModeToggle: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }) => {
   const { isOfflineMode, toggle, pendingCount, syncing, startSync } = useDataMode();
 
-  const handleToggle = async () => {
-    if (isOfflineMode && pendingCount > 0) {
-      const confirmed = window.confirm(
-        `You have ${pendingCount} unsynced local change(s).\n\nClick OK to go Live and sync them now, or Cancel to stay offline.`
-      );
-      if (!confirmed) return;
-      toggle();
-      await startSync();
-      return;
-    }
+  // toggle() (in dataModeContext) is the single owner of the go-Live confirm
+  // prompt + sync. Delegating here avoids the previous double-prompt/double-sync.
+  const handleToggle = () => {
     toggle();
   };
 

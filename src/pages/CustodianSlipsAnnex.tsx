@@ -30,11 +30,13 @@ import {
   AnnexInventoryItem
 } from "@/types/annex";
 import { getNewestRecordId, isWithinRecentThreshold } from "@/lib/utils";
+import { useDataMode } from "@/offline/dataModeContext";
 
 export const CustodianSlipsAnnex = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { isOfflineMode } = useDataMode();
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [selectedSlip, setSelectedSlip] = useState<AnnexCustodianSlip | null>(null);
@@ -807,7 +809,7 @@ export const CustodianSlipsAnnex = () => {
                       size="sm"
                       onClick={() => handleConfirmSlip(slip.id)}
                       className="flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700"
-                      disabled={confirmSlipMutation.isPending}
+                      disabled={confirmSlipMutation.isPending || isOfflineMode}
                       title="Confirm this slip as official (cannot be deleted after confirmation)"
                     >
                       {confirmSlipMutation.isPending ? (
@@ -825,7 +827,7 @@ export const CustodianSlipsAnnex = () => {
                       size="sm"
                       onClick={() => handleDeleteSlip(slip.id)}
                       className="flex items-center justify-center gap-1 text-red-600 hover:text-red-700"
-                      disabled={deleteSlipMutation.isPending}
+                      disabled={deleteSlipMutation.isPending || isOfflineMode}
                       title={slip.slipStatus === 'Issued'
                         ? 'Delete this issued custodian slip (temporary override)'
                         : 'Delete this draft custodian slip'}
@@ -889,8 +891,15 @@ export const CustodianSlipsAnnex = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Inventory Custodian Slips (ICS)</h1>
-        <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Inventory Custodian Slips (ICS)</h1>
+          {isOfflineMode && (
+            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+              Read-only while offline
+            </Badge>
+          )}
+        </div>
+        <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2" disabled={isOfflineMode}>
           <Plus className="h-4 w-4" />
           Create New Slip
         </Button>
@@ -948,7 +957,7 @@ export const CustodianSlipsAnnex = () => {
       {filteredSlips.length === 0 && !loading && (
         <div className="text-center py-8">
           <p className="text-muted-foreground">No custodian slips found.</p>
-          <Button onClick={() => setIsCreating(true)} className="mt-4">
+          <Button onClick={() => setIsCreating(true)} className="mt-4" disabled={isOfflineMode}>
             Create your first custodian slip
           </Button>
         </div>

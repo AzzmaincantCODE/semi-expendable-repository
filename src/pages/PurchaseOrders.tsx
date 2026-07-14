@@ -16,10 +16,12 @@ import { StockInDialog } from "@/components/procurement/StockInDialog";
 import { POItemsList } from "@/components/procurement/POItemsList";
 import { POHistoryDialog } from "@/components/procurement/POHistoryDialog";
 import { History } from "lucide-react";
+import { useDataMode } from "@/offline/dataModeContext";
 
 export const PurchaseOrders = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { isOfflineMode } = useDataMode();
     const [isCreatePoOpen, setIsCreatePoOpen] = useState(false);
     const [selectedPoForStockIn, setSelectedPoForStockIn] = useState<any>(null);
     const [selectedPoForDetails, setSelectedPoForDetails] = useState<any>(null);
@@ -165,11 +167,16 @@ export const PurchaseOrders = () => {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Purchase Orders</h1>
                     <p className="text-muted-foreground">Manage procurement and ingest items directly into inventory</p>
+                    {isOfflineMode && (
+                        <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-700">
+                            Read-only while offline
+                        </Badge>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <Dialog open={isCreatePoOpen} onOpenChange={setIsCreatePoOpen}>
                         <DialogTrigger asChild>
-                            <Button>
+                            <Button disabled={isOfflineMode}>
                                 <Plus className="w-4 h-4 mr-2" /> New Purchase Order
                             </Button>
                         </DialogTrigger>
@@ -286,10 +293,10 @@ export const PurchaseOrders = () => {
                                                 <Button variant="outline" size="sm" onClick={() => setSelectedPoForHistory(po)} title="View History">
                                                     <History className="w-4 h-4 mr-1" /> History
                                                 </Button>
-                                                <Button variant="outline" size="sm" onClick={() => handleEditClick(po.id)}>
+                                                <Button variant="outline" size="sm" onClick={() => handleEditClick(po.id)} disabled={isOfflineMode}>
                                                     <Pencil className="w-4 h-4 mr-1" /> Edit
                                                 </Button>
-                                                <Button variant="outline" size="sm" onClick={() => handleStockInClick(po.id)}>
+                                                <Button variant="outline" size="sm" onClick={() => handleStockInClick(po.id)} disabled={isOfflineMode}>
                                                     <ArrowDownToLine className="w-4 h-4 mr-1" /> Stock In
                                                 </Button>
                                                 <Button variant="outline" size="sm" onClick={() => handleViewItemsClick(po.id)}>
@@ -298,7 +305,7 @@ export const PurchaseOrders = () => {
                                                 <Button variant="ghost" size="sm" onClick={() => navigate(`/purchase-orders/${po.id}/print`)}>
                                                     <Eye className="w-4 h-4 mr-1" /> Print
                                                 </Button>
-                                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeletePO(po.id, po.po_number)}>
+                                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeletePO(po.id, po.po_number)} disabled={isOfflineMode}>
                                                     <Trash2 className="w-4 h-4 mr-1" /> Delete
                                                 </Button>
                                             </div>
