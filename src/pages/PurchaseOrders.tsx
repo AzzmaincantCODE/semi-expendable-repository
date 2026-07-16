@@ -86,6 +86,8 @@ export const PurchaseOrders = () => {
             if (variables?.poId) {
                 localStorage.removeItem(`stock_in_quantities_${variables.poId}`);
                 localStorage.removeItem(`stock_in_date_${variables.poId}`);
+                localStorage.removeItem(`stock_in_legacy_mode_${variables.poId}`);
+                localStorage.removeItem(`stock_in_legacy_numbers_${variables.poId}`);
             }
             
             setSelectedPoForStockIn(null);

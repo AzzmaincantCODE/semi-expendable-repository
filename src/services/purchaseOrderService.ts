@@ -586,7 +586,7 @@ export const purchaseOrderService = {
         if (error) throw error;
     },
 
-    async stockInItems(poId: string, itemsToStock: { poItemId: string, quantityToStock: number, description: string, unit: string, unitCost: number }[]) {
+    async stockInItems(poId: string, itemsToStock: { poItemId: string, quantityToStock: number, description: string, unit: string, unitCost: number, manualPropertyNumbers?: string[] }[]) {
         if (itemsToStock.length === 0) throw new Error('No items selected for stock in.');
 
         console.log(`[Stock-In] Starting optimized bulk stock-in for PO ${poId}...`);
@@ -629,8 +629,37 @@ export const purchaseOrderService = {
                 console.log(`[Stock-In] Item "${entry.description}" is PPE (>= 50k). Marking as Stocked for tracking only.`);
                 continue; // Skip property number generation for PPE
             }
+            if (entry.manualPropertyNumbers?.length) {
+                continue; // Legacy: property numbers supplied by user, skip generation
+            }
             const subCategory = entry.unitCost >= 5000 ? 'High Value Expendable' : 'Small Value Expendable';
             countsBySubCategory.set(subCategory, (countsBySubCategory.get(subCategory) || 0) + entry.quantityToStock);
+        }
+
+        // 2b. Validate manually supplied (legacy) property numbers BEFORE any writes
+        const manualNumbers = stockEntries.flatMap(e => (e.manualPropertyNumbers ?? []).map(n => (n || '').trim()));
+        if (manualNumbers.length > 0) {
+            for (const entry of stockEntries) {
+                if (entry.manualPropertyNumbers?.length && entry.manualPropertyNumbers.length !== entry.quantityToStock) {
+                    throw new Error(`${entry.description}: ${entry.manualPropertyNumbers.length} property number(s) provided for ${entry.quantityToStock} unit(s).`);
+                }
+            }
+            if (manualNumbers.some(n => !n)) {
+                throw new Error('Blank property numbers are not allowed.');
+            }
+            if (new Set(manualNumbers).size !== manualNumbers.length) {
+                const seen = new Set<string>();
+                const dupes = manualNumbers.filter(n => (seen.has(n) ? true : (seen.add(n), false)));
+                throw new Error(`Duplicate property numbers within this stock-in batch: ${[...new Set(dupes)].join(', ')}`);
+            }
+            const { data: existing, error: dupError } = await supabase
+                .from('inventory_items')
+                .select('property_number')
+                .in('property_number', manualNumbers);
+            if (dupError) throw new Error(`Failed to verify property number uniqueness: ${dupError.message}`);
+            if (existing && existing.length > 0) {
+                throw new Error(`Property numbers already exist in inventory: ${existing.map(e => e.property_number).join(', ')}`);
+            }
         }
 
         // Generate property numbers for all sub-categories in parallel
@@ -666,10 +695,17 @@ export const purchaseOrderService = {
             }
 
             const subCategory = entry.unitCost >= 5000 ? 'High Value Expendable' : 'Small Value Expendable';
-            const generatedNumbers = generatedNumbersBySubCategory.get(subCategory) || [];
-            const startIndex = numberOffsets.get(subCategory) || 0;
-            const propertyNumbers = generatedNumbers.slice(startIndex, startIndex + entry.quantityToStock);
-            numberOffsets.set(subCategory, startIndex + entry.quantityToStock);
+            const isLegacy = !!entry.manualPropertyNumbers?.length;
+            let propertyNumbers: string[];
+            if (isLegacy) {
+                // Legacy: use the user-supplied existing property numbers as-is (validated in step 2b)
+                propertyNumbers = entry.manualPropertyNumbers!.map(n => n.trim());
+            } else {
+                const generatedNumbers = generatedNumbersBySubCategory.get(subCategory) || [];
+                const startIndex = numberOffsets.get(subCategory) || 0;
+                propertyNumbers = generatedNumbers.slice(startIndex, startIndex + entry.quantityToStock);
+                numberOffsets.set(subCategory, startIndex + entry.quantityToStock);
+            }
 
             if (propertyNumbers.length !== entry.quantityToStock) {
                 errors.push(`${entry.description}: insufficient property numbers.`);
@@ -697,7 +733,7 @@ export const purchaseOrderService = {
                 status: 'Active',
                 fund_source_id: po.fundSourceId || null,
                 entity_name: "PROVINCIAL GOVERNMENT OF APAYAO",
-                remarks: `Stocked in from PO ${po.po_number}`,
+                remarks: `Stocked in from PO ${po.po_number}${isLegacy ? ' (legacy)' : ''}`,
                 estimated_useful_life: estimatedUsefulLife,
                 serial_number: (entry as any).serialNumber || (entry as any).serial_number || null
             })));
