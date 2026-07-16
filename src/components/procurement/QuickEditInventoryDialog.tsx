@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { lookupService, LookupItem } from "@/services/lookupService";
 import { annexService } from "@/services/annexService";
+import { syncInventoryRelatedRecords } from "@/services/simpleInventoryService";
 import { toast } from "sonner";
 
 interface QuickEditInventoryDialogProps {
@@ -75,7 +76,12 @@ export const QuickEditInventoryDialog = ({
     const computedDescription = useMemo(() => {
         const brandModel = [formData.brand?.trim(), formData.model?.trim()].filter(Boolean).join(' ');
         const sn = formData.serialNumber?.trim();
-        const existingDesc = inventoryItem?.description || "";
+        // Strip any previously embedded SN so an edited serial REPLACES the old one
+        const existingDesc = (inventoryItem?.description || "")
+            .replace(/,?\s*SN:\s*[^,]*/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/^[,\s]+|[,\s]+$/g, '')
+            .trim();
 
         // If brand/model are filled, build from those
         if (brandModel && sn) return `${brandModel} SN: ${sn}`;
@@ -83,11 +89,10 @@ export const QuickEditInventoryDialog = ({
 
         // If only SN was added (no brand/model), append it to the existing description
         if (sn) {
-            // Avoid duplicating SN if it's already in the description
-            if (existingDesc && !existingDesc.includes(`SN: ${sn}`)) {
+            if (existingDesc) {
                 return `${existingDesc} SN: ${sn}`;
             }
-            return existingDesc || `SN: ${sn}`;
+            return `SN: ${sn}`;
         }
 
         return existingDesc;
@@ -117,6 +122,10 @@ export const QuickEditInventoryDialog = ({
                 .eq('id', inventoryItem.id);
 
             if (updateError) throw updateError;
+
+            // Cascade the change to linked records (Property Cards, ICS, Transfers)
+            // so an edited serial number / description shows up on the property card
+            await syncInventoryRelatedRecords(inventoryItem.id);
 
             // 2. Auto-create Property Card if requested
             if (autoCreateCard) {

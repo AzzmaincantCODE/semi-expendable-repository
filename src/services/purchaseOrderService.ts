@@ -249,10 +249,14 @@ export const purchaseOrderService = {
                         unit_cost: payload.unit_cost,
                         total_cost: payload.unit_cost,
                         estimated_useful_life: payload.estimated_useful_life,
-                        serial_number: payload.serial_number,
                         semi_expandable_category: category
                     };
-                    
+                    // Serial numbers are per-unit: only sync when exactly ONE unit is
+                    // linked, otherwise a single SN would be stamped onto every unit
+                    if (linkedInventoryIds.length === 1) {
+                        invUpdate.serial_number = payload.serial_number || null;
+                    }
+
                     await supabase
                         .from('inventory_items')
                         .update(invUpdate)
@@ -735,7 +739,11 @@ export const purchaseOrderService = {
                 entity_name: "PROVINCIAL GOVERNMENT OF APAYAO",
                 remarks: `Stocked in from PO ${po.po_number}${isLegacy ? ' (legacy)' : ''}`,
                 estimated_useful_life: estimatedUsefulLife,
-                serial_number: (entry as any).serialNumber || (entry as any).serial_number || null
+                // Serial numbers are per-unit: only carry the PO-line SN when this
+                // line stocks exactly ONE unit (otherwise every unit would share it)
+                serial_number: entry.quantityToStock === 1
+                    ? ((entry as any).serialNumber || (entry as any).serial_number || null)
+                    : null
             })));
         }
 

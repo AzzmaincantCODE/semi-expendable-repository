@@ -57,6 +57,14 @@ export const syncInventoryRelatedRecords = async (ids: string | string[], poCont
         || (item.model ? `${item.brand ? item.brand + ' ' : ''}${item.model}` : item.brand)
         || '').trim();
 
+      // Strip any previously embedded SN fragment so an edited serial number
+      // REPLACES the old one instead of piling up ("..., SN: OLD, SN: NEW")
+      safeDescription = safeDescription
+        .replace(/,?\s*SN:\s*[^,]*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^[,\s]+|[,\s]+$/g, '')
+        .trim();
+
       if (item.serial_number && !safeDescription.includes(item.serial_number)) {
         if (safeDescription) {
           safeDescription += `, SN: ${item.serial_number}`;
@@ -483,15 +491,11 @@ export const simpleInventoryService = {
       insertData.custodian_position = item.custodianPosition;
     }
 
-    console.log('Inserting data:', insertData);
-
     const response = await supabase
       .from('inventory_items')
       .insert(insertData)
       .select()
       .single();
-
-    console.log('Supabase response:', response);
 
     if (response.error) {
       console.error('Error creating inventory item:', response.error);
@@ -636,11 +640,46 @@ export const simpleInventoryService = {
     }
     const updateData: Record<string, unknown> = {};
 
-    if (updates.propertyNumber) updateData.property_number = updates.propertyNumber;
+    if (updates.propertyNumber) {
+      const { data: existingItems, error: duplicateCheckError } = await supabase
+        .from('inventory_items')
+        .select('id, property_number, custodian, custodian_position, assignment_status, entity_name')
+        .eq('property_number', updates.propertyNumber)
+        .limit(1);
+
+      if (duplicateCheckError) {
+        console.error('Error checking for duplicate property number:', duplicateCheckError);
+        return {
+          data: null,
+          error: 'Failed to validate property number uniqueness',
+          success: false,
+        };
+      }
+
+      if (existingItems && existingItems.length > 0 && existingItems[0].id !== id) {
+        const existingItem = existingItems[0] as any;
+        const assignedTo = existingItem.custodian ? `${existingItem.custodian}${existingItem.custodian_position ? ` (${existingItem.custodian_position})` : ''}` : null;
+        const location = assignedTo
+          ? `Assigned to ${assignedTo}`
+          : existingItem.assignment_status
+            ? `Status: ${existingItem.assignment_status}`
+            : existingItem.entity_name
+              ? `Entity: ${existingItem.entity_name}`
+              : 'Existing inventory item';
+
+        return {
+          data: null,
+          error: `Property number ${updates.propertyNumber} already exists (${location}). Please choose a different number.`,
+          success: false,
+        };
+      }
+
+      updateData.property_number = updates.propertyNumber;
+    }
     if (updates.description) updateData.description = updates.description;
     if (updates.brand) updateData.brand = updates.brand;
     if (updates.model) updateData.model = updates.model;
-    if (updates.serialNumber) updateData.serial_number = updates.serialNumber;
+    if (updates.serialNumber !== undefined) updateData.serial_number = updates.serialNumber || null;
     if (updates.unitOfMeasure) updateData.unit_of_measure = updates.unitOfMeasure;
     if (updates.quantity !== undefined) updateData.quantity = updates.quantity;
     if (updates.unitCost !== undefined) {
