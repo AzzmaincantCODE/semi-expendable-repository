@@ -161,6 +161,16 @@ export const PurchaseOrderForm = ({ initialData, onSubmit, onCancel, isLoading }
 
     const watchedItems = watch("items");
 
+    // Serial numbers are per-unit: a row with qty >= 2 can't carry one shared SN.
+    // Clear any previously typed SN so it isn't stamped onto every exploded unit at stock-in.
+    useEffect(() => {
+        (watchedItems || []).forEach((item: any, index: number) => {
+            if ((Number(item?.quantity) || 1) >= 2 && item?.serialNumber) {
+                setValue(`items.${index}.serialNumber` as any, "", { shouldDirty: true });
+            }
+        });
+    }, [watchedItems, setValue]);
+
     return (
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
             {initialData?.status === 'Received' && (
@@ -385,16 +395,25 @@ export const PurchaseOrderForm = ({ initialData, onSubmit, onCancel, isLoading }
                                         />
                                     </TableCell>
                                     <TableCell className="p-0 border-r align-top">
-                                        <Textarea
-                                            {...register(`items.${index}.serialNumber` as const)}
-                                            placeholder="SN: ..."
-                                            className="min-h-[40px] resize-none border-0 rounded-none focus-visible:ring-1 focus-visible:ring-inset py-3 px-2 w-full bg-transparent text-xs"
-                                            onInput={(e) => {
-                                                const target = e.currentTarget;
-                                                target.style.height = 'auto';
-                                                target.style.height = target.scrollHeight + 'px';
-                                            }}
-                                        />
+                                        {(watchedItems[index]?.quantity || 1) >= 2 ? (
+                                            <div
+                                                className="min-h-[40px] py-3 px-2 w-full bg-muted/50 text-[10px] text-muted-foreground italic cursor-not-allowed"
+                                                title="Serial numbers can't be shared across units. Add them per unit after stock-in (Items list > Edit)."
+                                            >
+                                                Qty ≥ 2 — add SN per unit after stock-in
+                                            </div>
+                                        ) : (
+                                            <Textarea
+                                                {...register(`items.${index}.serialNumber` as const)}
+                                                placeholder="SN: ..."
+                                                className="min-h-[40px] resize-none border-0 rounded-none focus-visible:ring-1 focus-visible:ring-inset py-3 px-2 w-full bg-transparent text-xs"
+                                                onInput={(e) => {
+                                                    const target = e.currentTarget;
+                                                    target.style.height = 'auto';
+                                                    target.style.height = target.scrollHeight + 'px';
+                                                }}
+                                            />
+                                        )}
                                     </TableCell>
                                     <TableCell className="p-0 border-r align-top">
                                         <Input
