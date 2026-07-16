@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Plus, Loader2, AlertCircle, Printer, Eye, Trash2 } from "lucide-react";
+import { Search, Plus, Loader2, AlertCircle, Printer, Eye, Trash2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -48,6 +48,13 @@ export const PropertyCardsAnnex = () => {
   const [lockFundCluster, setLockFundCluster] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<AnnexPropertyCard | null>(null);
   const [showBulkWizard, setShowBulkWizard] = useState(false);
+  const [cardToEdit, setCardToEdit] = useState<AnnexPropertyCard | null>(null);
+  const [editCardForm, setEditCardForm] = useState({
+    fundCluster: "",
+    description: "",
+    dateAcquired: "",
+    remarks: ""
+  });
 
   // Helper function to get fund source name by ID
   const getFundSourceName = async (fundSourceId: string): Promise<string | null> => {
@@ -354,9 +361,54 @@ export const PropertyCardsAnnex = () => {
     },
   });
 
+  // Edit property card mutation
+  const editCardMutation = useMutation({
+    mutationFn: async ({ cardId, updates }: { cardId: string, updates: { fundCluster: string, description: string, dateAcquired: string, remarks: string } }) => {
+      const result = await propertyCardService.update(cardId, {
+        fundCluster: updates.fundCluster,
+        description: updates.description,
+        dateAcquired: updates.dateAcquired,
+        remarks: updates.remarks
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update property card');
+      }
+      return result.data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Property card updated successfully"
+      });
+      queryClient.invalidateQueries({ queryKey: ['annex-property-cards'] });
+      setCardToEdit(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleEditCard = (card: AnnexPropertyCard) => {
+    setCardToEdit(card);
+    setEditCardForm({
+      fundCluster: card.fundCluster || "",
+      description: card.description || "",
+      dateAcquired: card.dateAcquired ? card.dateAcquired.split('T')[0] : "",
+      remarks: card.remarks || ""
+    });
+  };
+
+  const handleSaveEditCard = () => {
+    if (!cardToEdit) return;
+    editCardMutation.mutate({ cardId: cardToEdit.id, updates: editCardForm });
+  };
+
   // Delete property card mutation
-  const deleteCardMutation = useMutation({
-    mutationFn: async (cardId: string) => {
+  const deleteCardMutation = useMutation({    mutationFn: async (cardId: string) => {
       // First check if the card can be deleted
       const canDeleteResult = await propertyCardService.canDelete(cardId);
       if (!canDeleteResult.success || !canDeleteResult.data) {
@@ -830,6 +882,15 @@ export const PropertyCardsAnnex = () => {
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  onClick={() => handleEditCard(card)}
+                                  title="Edit property card"
+                                  disabled={deleteCardMutation.isPending || isOfflineMode}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => handlePrintCard(card)}
                                   title="Print"
                                   disabled={deleteCardMutation.isPending}
@@ -970,6 +1031,71 @@ export const PropertyCardsAnnex = () => {
               >
                 {createCardMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Property Card
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Property Card Dialog */}
+      <Dialog open={!!cardToEdit} onOpenChange={(open) => { if (!open) setCardToEdit(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Property Card</DialogTitle>
+            <DialogDescription>
+              Update details for property number {cardToEdit?.propertyNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Property Number</Label>
+              <Input value={cardToEdit?.propertyNumber || ""} readOnly className="bg-muted font-mono" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editFundCluster">Fund Cluster</Label>
+              <Input
+                id="editFundCluster"
+                value={editCardForm.fundCluster}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, fundCluster: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editDescription">Description</Label>
+              <Input
+                id="editDescription"
+                value={editCardForm.description}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editDateAcquired">Date Acquired</Label>
+              <Input
+                id="editDateAcquired"
+                type="date"
+                value={editCardForm.dateAcquired}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, dateAcquired: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editRemarks">Remarks</Label>
+              <Input
+                id="editRemarks"
+                value={editCardForm.remarks}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, remarks: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCardToEdit(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEditCard}
+                disabled={editCardMutation.isPending}
+              >
+                {editCardMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
               </Button>
             </div>
           </div>
