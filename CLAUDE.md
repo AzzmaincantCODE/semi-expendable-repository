@@ -10,6 +10,7 @@ Guidance for Claude Code when working in this repository.
 - Stage ONLY the files belonging to that change — leave unrelated WIP untouched
 - Never batch multiple features into one commit
 - This repo has a history of merge corruption; fine-grained commits make working states easy to identify and roll back to
+- **Push to origin/main immediately after every commit** — GitHub Pages deploys from pushes to main (`.github/workflows/deploy-pages.yml`), so unpushed commits mean the live site stays stale
 
 ## Project overview
 
