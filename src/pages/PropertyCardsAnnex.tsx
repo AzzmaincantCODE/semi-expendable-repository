@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,6 +51,7 @@ export const PropertyCardsAnnex = () => {
   const [showBulkWizard, setShowBulkWizard] = useState(false);
   const [cardToEdit, setCardToEdit] = useState<AnnexPropertyCard | null>(null);
   const [editCardForm, setEditCardForm] = useState({
+    propertyNumber: "",
     fundCluster: "",
     description: "",
     dateAcquired: "",
@@ -363,15 +365,35 @@ export const PropertyCardsAnnex = () => {
 
   // Edit property card mutation
   const editCardMutation = useMutation({
-    mutationFn: async ({ cardId, updates }: { cardId: string, updates: { fundCluster: string, description: string, dateAcquired: string, remarks: string } }) => {
-      const result = await propertyCardService.update(cardId, {
+    mutationFn: async ({ card, updates }: { card: AnnexPropertyCard, updates: { propertyNumber: string, fundCluster: string, description: string, dateAcquired: string, remarks: string } }) => {
+      // 1. Card-only fields
+      const result = await propertyCardService.update(card.id, {
         fundCluster: updates.fundCluster,
-        description: updates.description,
         dateAcquired: updates.dateAcquired,
-        remarks: updates.remarks
+        remarks: updates.remarks,
+        // For cards without a linked inventory item, write these directly too
+        ...(card.inventoryItemId ? {} : {
+          propertyNumber: updates.propertyNumber,
+          description: updates.description
+        })
       });
       if (!result.success) {
         throw new Error(result.error || 'Failed to update property card');
+      }
+
+      // 2. If linked to inventory, route property number + description through the
+      // inventory service — it dup-checks the number and cascades the change to the
+      // inventory item, this card, custodian slips and transfers so all show the same
+      if (card.inventoryItemId) {
+        const invUpdates: any = {};
+        if (updates.propertyNumber !== card.propertyNumber) invUpdates.propertyNumber = updates.propertyNumber;
+        if (updates.description !== card.description) invUpdates.description = updates.description;
+        if (Object.keys(invUpdates).length > 0) {
+          const invResult = await simpleInventoryService.update(card.inventoryItemId, invUpdates);
+          if (!invResult.success) {
+            throw new Error(invResult.error || 'Failed to update linked inventory item');
+          }
+        }
       }
       return result.data;
     },
@@ -381,6 +403,7 @@ export const PropertyCardsAnnex = () => {
         description: "Property card updated successfully"
       });
       queryClient.invalidateQueries({ queryKey: ['annex-property-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setCardToEdit(null);
     },
     onError: (error: Error) => {
@@ -395,6 +418,7 @@ export const PropertyCardsAnnex = () => {
   const handleEditCard = (card: AnnexPropertyCard) => {
     setCardToEdit(card);
     setEditCardForm({
+      propertyNumber: card.propertyNumber || "",
       fundCluster: card.fundCluster || "",
       description: card.description || "",
       dateAcquired: card.dateAcquired ? card.dateAcquired.split('T')[0] : "",
@@ -404,7 +428,15 @@ export const PropertyCardsAnnex = () => {
 
   const handleSaveEditCard = () => {
     if (!cardToEdit) return;
-    editCardMutation.mutate({ cardId: cardToEdit.id, updates: editCardForm });
+    if (!editCardForm.propertyNumber.trim()) {
+      toast({
+        title: "Error",
+        description: "Property number cannot be empty",
+        variant: "destructive"
+      });
+      return;
+    }
+    editCardMutation.mutate({ card: cardToEdit, updates: editCardForm });
   };
 
   // Delete property card mutation
@@ -1049,8 +1081,16 @@ export const PropertyCardsAnnex = () => {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Property Number</Label>
-              <Input value={cardToEdit?.propertyNumber || ""} readOnly className="bg-muted font-mono" />
+              <Label htmlFor="editPropertyNumber">Property Number</Label>
+              <Input
+                id="editPropertyNumber"
+                value={editCardForm.propertyNumber}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, propertyNumber: e.target.value }))}
+                className="font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Changing this also updates the linked inventory item, custodian slips and transfers.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="editFundCluster">Fund Cluster</Label>
@@ -1062,10 +1102,21 @@ export const PropertyCardsAnnex = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="editDescription">Description</Label>
-              <Input
+              <Textarea
                 id="editDescription"
                 value={editCardForm.description}
                 onChange={(e) => setEditCardForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Enter item description..."
+                className="min-h-[40px] resize-none"
+                onInput={(e) => {
+                  const target = e.currentTarget;
+                  target.style.height = 'auto';
+                  target.style.height = target.scrollHeight + 'px';
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.height = 'auto';
+                  e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+                }}
               />
             </div>
             <div className="space-y-2">
