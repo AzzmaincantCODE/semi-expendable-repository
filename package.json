@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "auto-commit": "node scripts/auto-commit.js",
     "electron:dev": "concurrently \"cross-env ELECTRON=true npm run dev\" \"wait-on http://localhost:8080 && cross-env NODE_ENV=development electron .\"",
+    "desktop:update": "cross-env ELECTRON=true vite build && node scripts/sync-desktop-dist.mjs",
     "electron:build": "npx cross-env ELECTRON=true npx vite build && npx electron-packager . \"Semi-Property Guardian\" --platform=win32 --arch=x64 --out=build_desktop --overwrite --icon=\"public\\gso-logo.ico\" --ignore=\"node_modules|src|supabase|database|itrexcel|HEADERIMG|src-tauri|workplace|scripts|tmp\""
   },
   "dependencies": {
