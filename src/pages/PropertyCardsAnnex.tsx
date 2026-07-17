@@ -54,6 +54,7 @@ export const PropertyCardsAnnex = () => {
     propertyNumber: "",
     fundCluster: "",
     description: "",
+    serialNumber: "",
     dateAcquired: "",
     remarks: ""
   });
@@ -126,7 +127,7 @@ export const PropertyCardsAnnex = () => {
       if (inventoryItemIds.length > 0) {
         const { data: inventoryData, error: inventoryError } = await supabase
           .from('inventory_items')
-          .select('id, assignment_status, custodian, ics_number, property_number, sub_category, unit_cost, semi_expandable_category')
+          .select('id, assignment_status, custodian, ics_number, property_number, sub_category, unit_cost, semi_expandable_category, serial_number')
           .in('id', inventoryItemIds);
 
         if (!inventoryError && inventoryData) {
@@ -187,6 +188,7 @@ export const PropertyCardsAnnex = () => {
           assignmentStatus: inventoryItem?.assignment_status,
           custodian: inventoryItem?.custodian,
           icsNumber: inventoryItem?.ics_number,
+          serialNumber: inventoryItem?.serial_number || '',
           // Add value category for filtering
           subCategory: subCategory || (isHighValue ? 'High Value Expendable' : 'Small Value Expendable'),
           unitCost: unitCost,
@@ -365,7 +367,7 @@ export const PropertyCardsAnnex = () => {
 
   // Edit property card mutation
   const editCardMutation = useMutation({
-    mutationFn: async ({ card, updates }: { card: AnnexPropertyCard, updates: { propertyNumber: string, fundCluster: string, description: string, dateAcquired: string, remarks: string } }) => {
+    mutationFn: async ({ card, updates }: { card: AnnexPropertyCard, updates: { propertyNumber: string, fundCluster: string, description: string, serialNumber: string, dateAcquired: string, remarks: string } }) => {
       // 1. Card-only fields
       const result = await propertyCardService.update(card.id, {
         fundCluster: updates.fundCluster,
@@ -381,13 +383,16 @@ export const PropertyCardsAnnex = () => {
         throw new Error(result.error || 'Failed to update property card');
       }
 
-      // 2. If linked to inventory, route property number + description through the
-      // inventory service — it dup-checks the number and cascades the change to the
-      // inventory item, this card, custodian slips and transfers so all show the same
+      // 2. If linked to inventory, route property number + description + serial number
+      // through the inventory service — it dup-checks the number and cascades the change
+      // to the inventory item, this card, custodian slips and transfers so all show the
+      // same. The SN lives on inventory_items only; the sync re-embeds it as "SN: ..."
+      // in the card description (replacing any old SN fragment).
       if (card.inventoryItemId) {
         const invUpdates: any = {};
         if (updates.propertyNumber !== card.propertyNumber) invUpdates.propertyNumber = updates.propertyNumber;
         if (updates.description !== card.description) invUpdates.description = updates.description;
+        if (updates.serialNumber !== (card.serialNumber || '')) invUpdates.serialNumber = updates.serialNumber.trim();
         if (Object.keys(invUpdates).length > 0) {
           const invResult = await simpleInventoryService.update(card.inventoryItemId, invUpdates);
           if (!invResult.success) {
@@ -417,10 +422,20 @@ export const PropertyCardsAnnex = () => {
 
   const handleEditCard = (card: AnnexPropertyCard) => {
     setCardToEdit(card);
+    // For linked cards the SN gets its own field, so strip the embedded "SN: ..."
+    // fragment from the editable description — the inventory sync re-appends it on save.
+    const description = card.inventoryItemId
+      ? (card.description || '')
+          .replace(/,?\s*SN:\s*[^,]*/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .replace(/^[,\s]+|[,\s]+$/g, '')
+          .trim()
+      : (card.description || "");
     setEditCardForm({
       propertyNumber: card.propertyNumber || "",
       fundCluster: card.fundCluster || "",
-      description: card.description || "",
+      description,
+      serialNumber: card.serialNumber || "",
       dateAcquired: card.dateAcquired ? card.dateAcquired.split('T')[0] : "",
       remarks: card.remarks || ""
     });
@@ -1118,6 +1133,22 @@ export const PropertyCardsAnnex = () => {
                   e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
                 }}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editSerialNumber">Serial Number</Label>
+              <Input
+                id="editSerialNumber"
+                value={editCardForm.serialNumber}
+                onChange={(e) => setEditCardForm(prev => ({ ...prev, serialNumber: e.target.value }))}
+                placeholder="Enter serial number..."
+                className="font-mono"
+                disabled={!cardToEdit?.inventoryItemId}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {cardToEdit?.inventoryItemId
+                  ? 'Saved on the linked inventory item and shown as "SN: ..." on the card, custodian slips and transfers.'
+                  : 'Unavailable — this card has no linked inventory item. Add the SN in the description instead.'}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="editDateAcquired">Date Acquired</Label>
