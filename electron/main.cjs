@@ -16,18 +16,20 @@ function resolveIndexHtml() {
 }
 
 function createWindow() {
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // Block DevTools (F12 / Ctrl+Shift+I / inspect) in the packaged app
+      devTools: isDev,
     },
     title: 'Semi-Property Guardian',
     icon: path.join(__dirname, '..', 'public', 'gso-logo.ico'),
   });
-
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:8080');
@@ -61,7 +63,8 @@ function createWindow() {
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        // DevTools toggle only in dev builds
+        ...(isDev ? [{ role: 'toggleDevTools' }] : []),
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
