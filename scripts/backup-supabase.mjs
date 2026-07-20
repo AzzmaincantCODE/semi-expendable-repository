@@ -30,12 +30,12 @@ const BACKUP_ROOT = path.join(os.homedir(), 'Documents', 'SemiPropertyBackups');
 const RETENTION_COUNT = 30;
 const PAGE_SIZE = 1000;
 
-// All real tables the app uses (extracted from src/**  .from('...') calls).
-// NOT included: ics_registry, return_receipts, physical_count_reports (referenced
-// in excelExport.ts but never created in the DB) and
-// available_inventory_items_with_property_cards (a view — derived data).
-// Missing/new tables are handled gracefully: 404s are logged and skipped.
-const TABLES = [
+// Table list is discovered DYNAMICALLY at runtime from PostgREST's OpenAPI
+// spec (service key sees everything), so new tables are backed up
+// automatically. Views are included too — harmless, and "everything" means
+// everything. FALLBACK_TABLES is only used if discovery itself fails.
+const FALLBACK_TABLES = [
+  'audit_logs',
   'custodian_slip_items',
   'custodian_slips',
   'custodians',
@@ -44,9 +44,12 @@ const TABLES = [
   'iar_items',
   'iar_reports',
   'inventory_items',
+  'locations',
+  'loss_report_items',
   'loss_reports',
   'physical_count_items',
   'physical_counts',
+  'profiles',
   'property_card_entries',
   'property_cards',
   'property_registry',
@@ -57,6 +60,7 @@ const TABLES = [
   'return_slips',
   'semi_expandable_categories',
   'suppliers',
+  'system_notifications',
   'transfer_items',
   'unserviceable_report_items',
   'unserviceable_reports',
@@ -104,6 +108,26 @@ function todayPrefix() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Discover every table/view PostgREST exposes (service key sees all). */
+async function discoverTables() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    });
+    if (!res.ok) throw new Error(`OpenAPI HTTP ${res.status}`);
+    const spec = await res.json();
+    const tables = Object.keys(spec.paths || {})
+      .filter((p) => p !== '/' && !p.startsWith('/rpc'))
+      .map((p) => p.slice(1))
+      .sort();
+    if (!tables.length) throw new Error('OpenAPI listed no tables');
+    return { tables, discovered: true };
+  } catch (err) {
+    console.warn(`[backup] Table discovery failed (${err}) — using fallback list`);
+    return { tables: FALLBACK_TABLES, discovered: false };
+  }
 }
 
 async function fetchAllRows(table) {
@@ -158,7 +182,10 @@ async function main() {
   fs.mkdirSync(folder, { recursive: true });
   console.log(`[backup] Writing to ${folder}`);
 
-  const manifest = { startedAt: new Date().toISOString(), supabaseUrl: SUPABASE_URL, tables: {}, errors: [] };
+  const { tables: TABLES, discovered } = await discoverTables();
+  console.log(`[backup] ${TABLES.length} tables/views (${discovered ? 'auto-discovered' : 'fallback list'})`);
+
+  const manifest = { startedAt: new Date().toISOString(), supabaseUrl: SUPABASE_URL, tableDiscovery: discovered ? 'auto' : 'fallback', tables: {}, errors: [] };
   let totalRows = 0;
 
   for (const table of TABLES) {
