@@ -81,3 +81,6 @@ workplace ai rules
 
 # Personal user image assets
 HEADERIMG/
+# Supabase backup credentials (service_role key - NEVER commit)
+scripts/.env.backup
+scripts/backup.log
