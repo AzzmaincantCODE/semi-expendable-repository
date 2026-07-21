@@ -36,10 +36,10 @@ const ARCHIVE_DAYS = 30;   // keep this many daily snapshots
 const PAGE_SIZE    = 1000;
 const EXCEL_NAME   = 'SemiPropertyMirror.xlsx';
 
-// External drive auto-detect: first non-C: drive that has (or can create)
-// a SemiPropertyMirror folder. Set EXTERNAL_ROOT to force a specific path,
-// e.g. 'E:\\SemiPropertyMirror'.
-const EXTERNAL_ROOT = process.env.MIRROR_EXTERNAL_ROOT || '';
+// NOTE: This scheduled mirror writes ONLY to the local Documents folder.
+// Copying to an external/flash drive is deliberately NOT automatic — the
+// user does that on demand via the "Save to external drive" button in the
+// app's Settings > Danger Zone (you can't rely on the drive being plugged in).
 
 // ─── Load credentials (same .env.backup as the backup script) ─────────────────
 
@@ -137,19 +137,7 @@ function buildWorkbook(tableData, manifest) {
   return wb;
 }
 
-// ─── External drive ───────────────────────────────────────────────────────────
-
-function findExternalRoot() {
-  if (EXTERNAL_ROOT) return fs.existsSync(path.parse(EXTERNAL_ROOT).root) ? EXTERNAL_ROOT : null;
-  // Auto-detect: any drive letter D-Z whose root exists and is not the OS drive.
-  for (const letter of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
-    const root = `${letter}:\\`;
-    try {
-      if (fs.existsSync(root)) return path.join(root, 'SemiPropertyMirror');
-    } catch { /* drive not ready */ }
-  }
-  return null;
-}
+// ─── Copy helper (used for daily archive) ─────────────────────────────────────
 
 function copyDirContents(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
@@ -240,21 +228,9 @@ async function main() {
   }
   pruneArchives(ARCHIVE_DIR);
 
-  // External drive copy (best effort — skipped silently when unplugged).
-  const external = findExternalRoot();
-  if (external) {
-    try {
-      copyDirContents(CURRENT_DIR, path.join(external, 'current'));
-      const extArchive = path.join(external, 'archives', today);
-      if (!fs.existsSync(extArchive)) copyDirContents(CURRENT_DIR, extArchive);
-      pruneArchives(path.join(external, 'archives'));
-      console.log(`[mirror] external copy updated at ${external}`);
-    } catch (err) {
-      console.warn(`[mirror] external copy failed (${err}) — local mirror is fine`);
-    }
-  } else {
-    console.log('[mirror] no external drive detected — local mirror only');
-  }
+  // NOTE: external/flash-drive copy is intentionally NOT done here. It's a
+  // manual, on-demand action from the app (Settings > "Save to external
+  // drive") because the drive isn't always connected.
 
   if (manifest.errors.length) {
     console.error(`[mirror] DONE WITH ERRORS (${manifest.errors.length})`);

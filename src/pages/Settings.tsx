@@ -8,12 +8,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertTriangle, ShieldAlert, Upload, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Upload, CheckCircle2, XCircle, HardDriveDownload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   parseSnapshotFiles, restorableTables, restoreSnapshot,
   type ParsedSnapshot, type RestoreResult,
 } from "@/services/restoreService";
+import { exportToDrive, canWriteToFolder, type ExportProgress } from "@/services/driveExportService";
 
 const CONFIRM_PHRASE = "RESTORE";
 
@@ -29,6 +30,34 @@ export function Settings() {
   const [progressPct, setProgressPct] = useState(0);
   const [currentTable, setCurrentTable] = useState("");
   const [result, setResult] = useState<RestoreResult | null>(null);
+
+  // export-to-drive state
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const [exportDone, setExportDone] = useState<string | null>(null);
+
+  const handleExportToDrive = async () => {
+    setExporting(true);
+    setExportDone(null);
+    setExportProgress(null);
+    try {
+      const res = await exportToDrive((p) => setExportProgress(p));
+      const where = res.method === 'folder'
+        ? `folder "${res.location}" on the drive you picked`
+        : `your ${res.location} (copy the file to the drive yourself)`;
+      setExportDone(`Saved ${res.totalRows} rows (${res.tables} tables) to ${where}.`);
+      toast({ title: "Backup saved", description: `${res.totalRows} rows exported.` });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        toast({ title: "Cancelled", description: "No folder was chosen — nothing saved." });
+      } else {
+        toast({ title: "Export failed", description: e?.message ?? String(e), variant: "destructive" });
+      }
+    } finally {
+      setExporting(false);
+      setExportProgress(null);
+    }
+  };
 
   const handleFolderPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -108,6 +137,50 @@ export function Settings() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground">System configuration and maintenance.</p>
       </div>
+
+      {/* SAVE TO EXTERNAL DRIVE -------------------------------------------- */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <HardDriveDownload className="h-5 w-5 text-primary" />
+            <CardTitle>Save a backup to an external drive</CardTitle>
+          </div>
+          <CardDescription>
+            Copy a full snapshot of your data onto a flash drive or external
+            drive right now. This is a one-time, on-demand copy — the drive does
+            not need to stay connected.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+            <li>Plug in your flash drive or external drive.</li>
+            <li>Click the button below.</li>
+            {canWriteToFolder()
+              ? <li>When the folder window opens, select your drive and click "Select Folder". A dated backup folder is created on it.</li>
+              : <li>An Excel file will download — copy it onto your drive.</li>}
+          </ol>
+
+          <Button onClick={handleExportToDrive} disabled={exporting}>
+            <HardDriveDownload className="h-4 w-4 mr-2" />
+            {exporting ? "Saving…" : "Save backup to drive"}
+          </Button>
+
+          {exporting && exportProgress && (
+            <p className="text-xs text-muted-foreground">
+              {exportProgress.phase === 'discovering' && "Finding your data…"}
+              {exportProgress.phase === 'fetching' && `Reading ${exportProgress.table} (${exportProgress.done}/${exportProgress.total})…`}
+              {exportProgress.phase === 'writing' && "Writing files to the drive…"}
+            </p>
+          )}
+
+          {exportDone && (
+            <div className="flex items-start gap-2 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{exportDone}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* DANGER ZONE ------------------------------------------------------- */}
       <Card className="border-destructive/50">
