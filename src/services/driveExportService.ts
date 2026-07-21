@@ -42,7 +42,7 @@ export function canWriteToFolder(): boolean {
 }
 
 /** Discover base tables via PostgREST OpenAPI (falls back to a small probe). */
-async function discoverTables(): Promise<string[]> {
+async function discoverTables(): Promise<{ tables: string[]; usedFallback: boolean }> {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/`, {
       headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
@@ -53,35 +53,57 @@ async function discoverTables(): Promise<string[]> {
       .filter((p) => p !== '/' && !p.startsWith('/rpc'))
       .map((p) => p.slice(1))
       .sort();
-    if (tables.length) return tables;
+    if (tables.length) return { tables, usedFallback: false };
     throw new Error('empty spec');
   } catch {
     // Minimal fallback — the core tables the app writes to.
-    return [
-      'departments', 'suppliers', 'custodians', 'fund_sources',
-      'semi_expandable_categories', 'purchase_orders', 'purchase_order_items',
-      'inventory_items', 'property_cards', 'property_card_entries',
-      'custodian_slips', 'custodian_slip_items', 'iar_reports', 'iar_items',
-      'return_slips', 'return_slip_items', 'transfers', 'transfer_items',
-    ];
+    return {
+      usedFallback: true,
+      tables: [
+        'departments', 'suppliers', 'custodians', 'fund_sources',
+        'semi_expandable_categories', 'purchase_orders', 'purchase_order_items',
+        'inventory_items', 'property_cards', 'property_card_entries',
+        'custodian_slips', 'custodian_slip_items', 'iar_reports', 'iar_items',
+        'return_slips', 'return_slip_items', 'transfers', 'transfer_items',
+      ],
+    };
   }
 }
 
-async function fetchAllRows(table: string): Promise<any[] | null> {
+type FetchResult =
+  | { status: 'ok'; rows: any[] }
+  | { status: 'missing' }   // table not in this DB (setup SQL not run) — skippable
+  | { status: 'failed' };   // network/timeout/5xx — must abort the export
+
+/**
+ * "Relation does not exist"-type errors just mean the table isn't in this DB
+ * — safe to skip. Anything else (network drop, timeout, 5xx) is a real
+ * failure and the export must not silently omit the table.
+ */
+function isMissingTableError(error: { code?: string; message?: string }): boolean {
+  if (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST202') return true;
+  return typeof error.message === 'string' && error.message.toLowerCase().includes('does not exist');
+}
+
+async function fetchAllRows(table: string): Promise<FetchResult> {
   const rows: any[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) {
-      // 404-ish / missing table — skip it, not fatal.
-      return null;
+  try {
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) {
+        return isMissingTableError(error) ? { status: 'missing' } : { status: 'failed' };
+      }
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE_SIZE) break;
     }
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE_SIZE) break;
+  } catch {
+    // Thrown mid-request (fetch TypeError etc.) — connection lost.
+    return { status: 'failed' };
   }
-  return rows;
+  return { status: 'ok', rows };
 }
 
 function excelSafeRow(row: Record<string, any>) {
@@ -124,18 +146,37 @@ export async function exportToDrive(
   onProgress?: (p: ExportProgress) => void
 ): Promise<ExportResult> {
   onProgress?.({ phase: 'discovering', done: 0, total: 1 });
-  const tables = await discoverTables();
+  const { tables, usedFallback } = await discoverTables();
 
   const tableData: Record<string, any[]> = {};
+  const failedTables: string[] = [];
   let totalRows = 0;
   let done = 0;
   for (const table of tables) {
     onProgress?.({ phase: 'fetching', table, done, total: tables.length });
-    const rows = await fetchAllRows(table);
+    const result = await fetchAllRows(table);
     done += 1;
-    if (rows === null) continue; // missing table
-    tableData[table] = rows;
-    totalRows += rows.length;
+    if (result.status === 'missing') continue; // table not in this DB — fine to skip
+    if (result.status === 'failed') { failedTables.push(table); continue; }
+    tableData[table] = result.rows;
+    totalRows += result.rows.length;
+  }
+
+  // Refuse to save anything if the fetch looks incomplete — a backup silently
+  // missing tables is worse than no backup. Fires BEFORE the folder picker so
+  // nothing is ever written on a bad fetch. (If discovery already fell back to
+  // the hardcoded list AND a fetch failed too, that's definitely a dead
+  // connection — same abort.)
+  if (failedTables.length > 0 || Object.keys(tableData).length === 0) {
+    const names = failedTables.length ? ` (${failedTables.join(', ')})` : '';
+    const n = failedTables.length || tables.length;
+    const err = new Error(
+      `Connection problem: ${n} table(s) could not be read${names}.` +
+      (usedFallback && failedTables.length ? ' Table discovery also failed.' : '') +
+      ' Nothing was saved — check your internet and try again.'
+    );
+    err.name = 'ExportIncompleteError'; // NOT 'AbortError' — that means user-cancel to callers
+    throw err;
   }
 
   const finishedAt = new Date().toISOString();
