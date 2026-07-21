@@ -150,6 +150,21 @@ rows each table had at that moment — useful for confirming completeness:
 
 ## 5. Restore to Supabase (recovery)
 
+### Easiest way — in the app (no terminal)
+
+Open the app → **Settings** (sidebar) → **Danger Zone**:
+
+1. Click **Select folder…** and pick `Documents\SemiPropertyMirror\current`
+   (or an `archives\YYYY-MM-DD` folder)
+2. Review the preview table of what will be restored
+3. Click **Restore this data**, type `RESTORE` to confirm
+
+This merges the snapshot into the live database through your logged-in
+account (upsert — safe, non-destructive). It cannot do a full wipe-and-clone;
+for that use the terminal method below with `--wipe`.
+
+### Full-power way — terminal
+
 Use this when:
 - The Supabase project was accidentally corrupted or data was deleted
 - You are moving to a new Supabase project (same or different account)
