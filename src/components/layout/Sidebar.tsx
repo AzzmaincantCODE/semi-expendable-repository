@@ -16,7 +16,8 @@ import {
   FileSpreadsheet,
   BookOpen,
   Clock,
-  RotateCcw
+  RotateCcw,
+  ShieldAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OfflineModeToggle } from "@/offline/OfflineModeToggle";
@@ -35,6 +36,7 @@ const navigation = [
   { name: "Activity Log", href: "/activity-log", icon: Clock },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Lookups", href: "/settings/lookups", icon: Settings },
+  { name: "Settings", href: "/settings", icon: ShieldAlert },
 ];
 
 export const Sidebar = ({ className }: { className?: string }) => {

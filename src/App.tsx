@@ -37,6 +37,7 @@ import { IARPrint } from "@/components/procurement/IARPrint";
 import { WeeklyPropertyReportPrint } from "@/components/reports/WeeklyPropertyReportPrint";
 import Debug from "@/pages/Debug";
 import Lookups from "@/pages/Lookups";
+import { Settings as SettingsPage } from "@/pages/Settings";
 import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound";
 import React from "react";
@@ -141,6 +142,7 @@ const App = () => {
                           <Route path="/activity-log" element={<ActivityLog />} />
                           <Route path="/debug" element={<Debug />} />
                           <Route path="/settings/lookups" element={<Lookups />} />
+                          <Route path="/settings" element={<SettingsPage />} />
                           <Route path="*" element={<NotFound />} />
                         </>
                       ) : (
